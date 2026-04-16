@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.ai_devs import OpenRouterService, send_report, get_hub_data
+from src.ai_devs import LLMService, send_report, get_hub_data
 
 
 # ── Pydantic schemas for structured output ──────────────────────────
@@ -95,7 +95,7 @@ Rules:
 """
 
 
-def tag_jobs(people: list[dict], service: OpenRouterService) -> list[list[str]]:
+def tag_jobs(people: list[dict], service: LLMService) -> list[list[str]]:
     """Use LLM structured output to tag job descriptions in batch."""
     prompt = build_tagging_prompt(people)
     messages = [
@@ -148,7 +148,7 @@ def main():
         return
 
     # 3. Tag jobs via LLM
-    service = OpenRouterService()
+    service = LLMService(provider="gateway")
     tags_list = tag_jobs(candidates, service)
     for person, tags in zip(candidates, tags_list):
         print(f"  {person['name']} {person['surname']} — {person.get('job', '?')} → {tags}")
