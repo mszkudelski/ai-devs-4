@@ -1,21 +1,52 @@
 """HTTP utilities for AI_devs tasks."""
 
+import time
 import requests
 from typing import Any
 
 from .config import get_api_key, HUB_VERIFY_URL, HUB_DATA_URL
 
+MAX_RETRIES = 3
+RETRY_BACKOFF = 3  # seconds, doubled each retry
 
-def post_request(url: str, data: dict, **kwargs) -> dict:
-    """Send a POST request and return the JSON response."""
-    response = requests.post(url, json=data, **kwargs)
-    response.raise_for_status()
+
+def _retry_on_429(make_request, retries=MAX_RETRIES, backoff=RETRY_BACKOFF):
+    """Retry a request function on 429 Too Many Requests."""
+    for attempt in range(retries + 1):
+        response = make_request()
+        if response.status_code != 429:
+            return response
+        wait = backoff * (2 ** attempt)
+        print(f"Rate limited (429). Retrying in {wait}s... (attempt {attempt + 1}/{retries})")
+        time.sleep(wait)
+    return response  # return last response even if still 429
+
+
+def post_request(url: str, data: dict, raise_on_error: bool = True, **kwargs) -> dict:
+    """Send a POST request and return the JSON response.
+    
+    Args:
+        url: The endpoint URL.
+        data: JSON-serializable payload.
+        raise_on_error: If True (default), raise on HTTP errors.
+            If False, return the error body as a dict instead.
+    """
+    response = _retry_on_429(lambda: requests.post(url, json=data, **kwargs))
+    if not response.ok:
+        try:
+            error_body = response.json()
+        except Exception:
+            error_body = {"error": response.text}
+        print(f"HTTP {response.status_code} from {url}: {error_body}")
+        if raise_on_error:
+            response.raise_for_status()
+        return {"http_status": response.status_code, **error_body}
     return response.json()
 
 
 def get_request(url: str, **kwargs) -> requests.Response:
     """Send a GET request and return the response."""
-    response = requests.get(url, **kwargs)
+    response = _retry_on_429(lambda: requests.get(url, **kwargs))
     response.raise_for_status()
     return response
 
