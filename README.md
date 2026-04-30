@@ -1,6 +1,6 @@
 # AI_devs 4 — Task Solutions
 
-Python solutions for [AI_devs 4: Builders](https://hub.ag3nts.org/) tasks.
+Python solutions for AI_devs 4: Builders tasks.
 
 ## Setup
 
@@ -19,8 +19,33 @@ Python solutions for [AI_devs 4: Builders](https://hub.ag3nts.org/) tasks.
    AI_DEVS_API_KEY=your-key-from-hub
    OPEN_ROUTER_API_KEY=your-openrouter-key
    ```
-   - `AI_DEVS_API_KEY` — get it from [hub.ag3nts.org](https://hub.ag3nts.org/)
-   - `OPEN_ROUTER_API_KEY` — get it from [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)
+   - `AI_DEVS_API_KEY` — hub API key
+   - `OPEN_ROUTER_API_KEY` — OpenRouter API key
+
+## AI Gateway — Available Models
+
+Use these exact names as `model=` when `provider="gateway"` or passing `base_url=get_ai_gateway_base_url()`:
+
+| Model | Provider | Mode | Max Input | Max Output |
+|---|---|---|---|---|
+| `gemini-2.5-flash` | Vertex AI | chat | 1049K | 66K |
+| `gemini-2.5-flash-lite` | Vertex AI | chat | 1049K | 66K |
+| `gemini-3-flash-preview` | Vertex AI | chat | 1049K | 66K |
+| `gemini-3.1-flash-lite-preview` | Vertex AI | chat | 1049K | 66K |
+| `gemini-3.1-pro-preview` | Vertex AI | chat | 1049K | 66K |
+| `gpt-4.1-mini` | Azure | chat | 1048K | 33K |
+| `gpt-4.1-mini-batch` | Azure | chat | N/A | N/A |
+| `gpt-4o-mini` | Azure | chat | 128K | 16K |
+| `gpt-4o-mini-batch` | Azure | chat | N/A | N/A |
+| `gpt-5-chat` | Azure | chat | 128K | 16K |
+| `gpt-5-mini` | Azure | chat | 272K | 128K |
+| `gpt-5.1` | Azure | chat | 272K | 128K |
+| `gpt-5.1-codex-mini` | Azure | responses | 272K | 128K |
+| `gpt-5.2-chat` | Azure | chat | 128K | 16K |
+| `gpt-5.3-chat` | Azure | chat | 128K | 16K |
+| `text-embedding-3-small` | Azure | embedding | 8K | — |
+
+**Recommended:** `gpt-4.1-mini` for agents/function-calling, `gemini-2.5-flash` for vision.
 
 ## Running Tasks
 
