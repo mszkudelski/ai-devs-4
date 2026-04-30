@@ -1,8 +1,8 @@
 from .api import send_report, post_request, get_request, get_hub_data, parse_csv
 from .openai_service import LLMService, OpenRouterService, AIGatewayService
 from .config import get_api_key, get_open_router_api_key, get_ai_gateway_api_key
-from .agent import Tool, run_agent
-from .geo import haversine_distance
+from .agent import Tool, run_agent, run_agent_turn
+from .geo import haversine_distance, find_nearest_facility
 from .tools import READ_DOC_TOOL, make_analyze_image_tool
 
 __all__ = [
@@ -19,7 +19,9 @@ __all__ = [
     "get_ai_gateway_api_key",
     "Tool",
     "run_agent",
+    "run_agent_turn",
     "haversine_distance",
+    "find_nearest_facility",
     "READ_DOC_TOOL",
     "make_analyze_image_tool",
 ]

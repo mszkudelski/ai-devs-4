@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.ai_devs import get_api_key, get_hub_data, post_request, send_report, LLMService, parse_csv
 from src.ai_devs.config import HUB_VERIFY_URL, HUB_API_URL
 from src.ai_devs.agent import Tool, run_agent
-from src.ai_devs.geo import haversine_distance, POLISH_CITY_COORDS
+from src.ai_devs.geo import find_nearest_facility, POLISH_CITY_COORDS
 from tasks.s01e01.solution import filter_people, tag_jobs
 
 
@@ -86,36 +86,24 @@ def _get_access_level(name: str, surname: str, birthYear: int) -> dict:
 
 def _find_nearest_plant(name: str, surname: str) -> dict:
     """Find the nearest active power plant to any of a person's observed locations."""
-    # Fetch person locations
     payload = {"apikey": get_api_key(), "name": name, "surname": surname}
     locations = post_request(f"{HUB_API_URL}/location", payload)
     if not locations:
         return {"error": f"No locations found for {name} {surname}"}
 
-    # Fetch power plants with coordinates
     plants_data = _get_power_plants()
     plants = plants_data.get("power_plants", plants_data)
 
-    best = None
-    for city, info in plants.items():
-        if not info.get("is_active"):
-            continue
-        plant_lat, plant_lon = info.get("latitude"), info.get("longitude")
-        if plant_lat is None or plant_lon is None:
-            continue
-        for loc in locations:
-            dist = haversine_distance(loc["latitude"], loc["longitude"], plant_lat, plant_lon)
-            if best is None or dist < best["distance_km"]:
-                best = {
-                    "city": city,
-                    "plant_code": info["code"],
-                    "plant_lat": plant_lat,
-                    "plant_lon": plant_lon,
-                    "person_lat": loc["latitude"],
-                    "person_lon": loc["longitude"],
-                    "distance_km": round(dist, 2),
-                }
-    return best or {"error": "No active plants with coordinates found"}
+    result = find_nearest_facility(
+        person_coords=[(loc["latitude"], loc["longitude"]) for loc in locations],
+        facilities=plants,
+        active_key="is_active",
+    )
+    if not result:
+        return {"error": "No active plants with coordinates found"}
+
+    plant_info = plants[result["facility_id"]]
+    return {**result, "city": result["facility_id"], "plant_code": plant_info["code"]}
 
 
 def _submit_report(name: str, surname: str, accessLevel: int, powerPlant: str) -> dict:

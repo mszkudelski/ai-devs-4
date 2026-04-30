@@ -29,6 +29,47 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return R * 2 * math.asin(math.sqrt(a))
 
 
+def find_nearest_facility(
+    person_coords: list[tuple[float, float]],
+    facilities: dict[str, dict],
+    lat_key: str = "latitude",
+    lon_key: str = "longitude",
+    active_key: str = None,
+) -> dict | None:
+    """Find the facility nearest to any of a person's observed coordinates.
+
+    Args:
+        person_coords: List of (lat, lon) tuples for observed locations.
+        facilities: Dict mapping facility_id -> info dict.
+        lat_key: Key in info dict for latitude.
+        lon_key: Key in info dict for longitude.
+        active_key: If set, skip facilities where info[active_key] is falsy.
+
+    Returns:
+        Dict with facility_id, distance_km, person_lat, person_lon,
+        facility_lat, facility_lon — or None if no valid facility found.
+    """
+    best = None
+    for facility_id, info in facilities.items():
+        if active_key and not info.get(active_key):
+            continue
+        f_lat, f_lon = info.get(lat_key), info.get(lon_key)
+        if f_lat is None or f_lon is None:
+            continue
+        for p_lat, p_lon in person_coords:
+            dist = haversine_distance(p_lat, p_lon, f_lat, f_lon)
+            if best is None or dist < best["distance_km"]:
+                best = {
+                    "facility_id": facility_id,
+                    "distance_km": round(dist, 2),
+                    "person_lat": p_lat,
+                    "person_lon": p_lon,
+                    "facility_lat": f_lat,
+                    "facility_lon": f_lon,
+                }
+    return best
+
+
 # Known Polish city coordinates (lat, lon) — extend as needed.
 POLISH_CITY_COORDS: dict[str, tuple[float, float]] = {
     "Białystok": (53.1325, 23.1688),

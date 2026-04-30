@@ -70,36 +70,35 @@ class Tool:
             return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
 
-def run_agent(
-    system_prompt: str,
-    user_message: str,
+def run_agent_turn(
+    messages: list[dict],
     tools: list[Tool],
     model: str = "gpt-4.1-mini",
-    max_iterations: int = 15,
-    max_tokens: int = 4096,
+    max_iterations: int = 5,
+    max_tokens: int = 2048,
     verbose: bool = True,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
-) -> str:
-    """Run a Function Calling agent loop.
+) -> tuple[str, list[dict]]:
+    """Run one agent turn over an existing messages list.
 
-    Sends a system prompt, user message, and tool schemas to the LLM.
-    Iteratively processes tool calls until the model produces a final text
-    response or the iteration limit is reached.
+    The first element of `messages` MUST be the system message; the last MUST
+    be the new user message. The input list is shallow-copied (not mutated).
 
     Args:
-        system_prompt: Instructions defining the agent's behaviour.
-        user_message: The task or question to solve.
+        messages: Pre-built conversation history ending with the user message
+            that triggers this turn.
         tools: Available tools the agent may call.
         model: LLM model identifier (OpenRouter-compatible).
-        max_iterations: Safety cap on the number of LLM round-trips.
+        max_iterations: Safety cap on the number of LLM round-trips this turn.
         max_tokens: Max tokens per LLM response.
         verbose: Print progress to stdout.
         api_key: Override the default OpenRouter API key.
         base_url: Override the default OpenRouter base URL.
 
     Returns:
-        The agent's final text response.
+        (final_text, updated_messages) — the agent's final reply and the new
+        message history including all assistant + tool messages from this turn.
     """
     client = OpenAI(
         api_key=api_key or get_open_router_api_key(),
@@ -109,10 +108,7 @@ def run_agent(
     tool_map: dict[str, Tool] = {t.name: t for t in tools}
     openai_tools = [t.openai_schema for t in tools]
 
-    messages: list[dict] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
+    messages = list(messages)
 
     for i in range(1, max_iterations + 1):
         if verbose:
@@ -132,7 +128,8 @@ def run_agent(
             final = message.content or ""
             if verbose:
                 print(f"Final response: {final[:300]}")
-            return final
+            messages.append({"role": "assistant", "content": final})
+            return final, messages
 
         # ── Record assistant message with tool calls ──
         assistant_msg: dict = {"role": "assistant", "content": message.content or ""}
@@ -181,4 +178,41 @@ def run_agent(
     # Exhausted iterations
     if verbose:
         print("Agent reached max iterations without a final response.")
-    return "ERROR: Agent reached the maximum iteration limit without producing a final answer."
+    return (
+        "ERROR: Agent reached the maximum iteration limit without producing a final answer.",
+        messages,
+    )
+
+
+def run_agent(
+    system_prompt: str,
+    user_message: str,
+    tools: list[Tool],
+    model: str = "gpt-4.1-mini",
+    max_iterations: int = 15,
+    max_tokens: int = 4096,
+    verbose: bool = True,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> str:
+    """Run a one-shot Function Calling agent.
+
+    Builds a fresh [system, user] message list and runs the tool loop until
+    the model produces a final text response or the iteration limit is reached.
+    Returns only the final text — see `run_agent_turn` for multi-turn use.
+    """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+    final, _ = run_agent_turn(
+        messages=messages,
+        tools=tools,
+        model=model,
+        max_iterations=max_iterations,
+        max_tokens=max_tokens,
+        verbose=verbose,
+        api_key=api_key,
+        base_url=base_url,
+    )
+    return final
