@@ -1,5 +1,7 @@
 """HTTP utilities for AI_devs tasks."""
 
+import csv
+import io
 import time
 import requests
 from typing import Any
@@ -87,3 +89,9 @@ def get_hub_data(filename: str) -> requests.Response:
     url = f"{HUB_DATA_URL}/{api_key}/{filename}"
     print(f"Downloading {filename} from hub...")
     return get_request(url)
+
+
+def parse_csv(text: str) -> list[dict]:
+    """Parse CSV text into a list of dicts."""
+    reader = csv.DictReader(io.StringIO(text))
+    return [row for row in reader]

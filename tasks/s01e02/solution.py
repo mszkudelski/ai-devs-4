@@ -17,11 +17,11 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.ai_devs import get_api_key, get_hub_data, post_request, send_report, LLMService
+from src.ai_devs import get_api_key, get_hub_data, post_request, send_report, LLMService, parse_csv
 from src.ai_devs.config import HUB_VERIFY_URL, HUB_API_URL
 from src.ai_devs.agent import Tool, run_agent
 from src.ai_devs.geo import haversine_distance, POLISH_CITY_COORDS
-from tasks.s01e01.solution import parse_csv, filter_people, tag_jobs, build_answer
+from tasks.s01e01.solution import filter_people, tag_jobs
 
 
 # ── Tool callbacks ──────────────────────────────────────────────────

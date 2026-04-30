@@ -11,175 +11,80 @@ Usage:
 """
 
 import argparse
-import base64
 import sys
 import os
-from typing import Optional
-
-import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.ai_devs import LLMService, send_report
-from src.ai_devs.config import HUB_BASE_URL, get_ai_gateway_api_key, get_ai_gateway_base_url
-from src.ai_devs.agent import Tool, run_agent
+from src.ai_devs import LLMService, Tool, run_agent, READ_DOC_TOOL, make_analyze_image_tool
+from src.ai_devs.api import post_request
+from src.ai_devs.config import HUB_BASE_URL, HUB_VERIFY_URL, get_api_key, get_ai_gateway_api_key, get_ai_gateway_base_url
 
 
 DOC_BASE_URL = f"{HUB_BASE_URL}/dane/doc"
 DOC_INDEX_URL = f"{DOC_BASE_URL}/index.md"
 
-_vision_service: Optional[LLMService] = None
-
-
-def _get_vision_service() -> LLMService:
-    global _vision_service
-    if _vision_service is None:
-        _vision_service = LLMService(provider="gateway", model="gemini-2.5-flash")
-    return _vision_service
-
 
 # ── Tool callbacks ───────────────────────────────────────────────────
 
-def _read_doc(url: str) -> str:
-    """Fetch a text document by URL."""
-    try:
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
-        return resp.text
-    except Exception as e:
-        return f"ERROR fetching {url}: {e}"
-
-
-def _analyze_image(url: str) -> str:
-    """Download an image and extract all its content using a vision model."""
-    try:
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
-    except Exception as e:
-        return f"ERROR fetching image {url}: {e}"
-
-    content_type = resp.headers.get("Content-Type", "image/png").split(";")[0].strip()
-    b64 = base64.b64encode(resp.content).decode("utf-8")
-    image_data_url = f"data:{content_type};base64,{b64}"
-
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "This image is part of SPK (System Przesyłek Konduktorskich) documentation. "
-                        "Extract ALL text, numbers, tables, codes, routes, tariffs, and any other "
-                        "information visible in the image. Return a complete structured description "
-                        "of every piece of data — nothing should be omitted."
-                    ),
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_data_url},
-                },
-            ],
-        }
-    ]
-    return _get_vision_service().chat(messages, temperature=0.0)
-
-
 def _submit_declaration(declaration: str) -> str:
-    """Submit the completed SPK declaration to the Hub and return the response."""
-    result = send_report("sendit", {"declaration": declaration})
+    payload = {
+        "apikey": get_api_key(),
+        "task": "sendit",
+        "answer": {"declaration": declaration},
+    }
+    result = post_request(HUB_VERIFY_URL, payload, raise_on_error=False)
     return str(result)
 
 
-# ── Tool definitions ─────────────────────────────────────────────────
-
-TOOLS = [
-    Tool(
-        name="read_doc",
-        description=(
-            "Fetch a text document (Markdown, plain text, etc.) by its full URL. "
-            "Returns the raw text content."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Full URL of the document"},
-            },
-            "required": ["url"],
-        },
-        callback=_read_doc,
+SUBMIT_DECLARATION_TOOL = Tool(
+    name="submit_declaration",
+    description=(
+        "Submit the completed SPK transport declaration to the Hub for verification. "
+        "Returns the hub response. If rejected, the response contains an error hint "
+        "describing what needs to be fixed — read it carefully, correct the declaration, "
+        "and call this tool again."
     ),
-    Tool(
-        name="analyze_image",
-        description=(
-            "Download an image file and extract ALL information from it using a vision model. "
-            "Use for .png, .jpg, .gif, and other image files found in the documentation. "
-            "Returns a structured text description of everything visible in the image."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Full URL of the image"},
+    parameters={
+        "type": "object",
+        "properties": {
+            "declaration": {
+                "type": "string",
+                "description": "Full declaration text, formatted exactly as the template",
             },
-            "required": ["url"],
         },
-        callback=_analyze_image,
-    ),
-    Tool(
-        name="submit_declaration",
-        description=(
-            "Submit the completed SPK transport declaration to the Hub for verification. "
-            "Returns the hub response. If rejected, the response contains an error hint "
-            "describing what needs to be fixed — read it carefully, correct the declaration, "
-            "and call this tool again."
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "declaration": {
-                    "type": "string",
-                    "description": "Full declaration text, formatted exactly as the template",
-                },
-            },
-            "required": ["declaration"],
-        },
-        callback=_submit_declaration,
-    ),
-]
+        "required": ["declaration"],
+    },
+    callback=_submit_declaration,
+)
 
 
 # ── System prompt ────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""\
-You are an expert at filling SPK (System Przesyłek Konduktorskich) transport declarations.
+You are an SPK (System Przesyłek Konduktorskich) transport declaration expert. \
+Your goal is to submit a valid, accepted declaration to the Hub.
 
-Your task is to fill out and submit a transport declaration using the official SPK documentation.
+The official SPK documentation is available starting at {DOC_INDEX_URL}. \
+It spans multiple files and may include images — treat all of it as your source of truth. \
+Use read_doc for text files and analyze_image for any image files.
 
-Steps:
-1. Read the documentation index: {DOC_INDEX_URL}
-2. Follow ALL links in the docs — read EVERY referenced file (use read_doc for text/markdown, \
-analyze_image for any image files such as .png .jpg .gif)
-3. Find the declaration template — note its exact format, all field names, separators, and order
-4. Find the route code for Gdańsk → Żarnowiec (check railway connection tables or route lists)
-5. Determine the correct package category whose fee is 0 PP (system-funded) — check the tariff tables
-6. Fill the declaration EXACTLY per the template — preserve all separators, field order, and formatting
-7. Submit with submit_declaration
-8. If the Hub rejects the declaration, read the error message carefully — it tells you what to fix. \
-Correct only what the error specifies and resubmit. Do NOT retry with the same content.
+Constraints:
+- Read the complete documentation before attempting to submit — do not submit until you have read every file referenced in the docs, including images
+- All field values must come from the documentation — never invent data
+- The declaration must match the template format exactly — Hub validates both values and formatting
+- Budget must result in 0 PP (choose the system-funded category)
+- Special notes field must be empty
+- If the Hub rejects your submission, go back to the documentation to find the correct value — do not guess
 
-Declaration data to fill in:
-- Sender ID (identyfikator nadawcy): 450202122
-- Origin (punkt nadawczy): Gdańsk
-- Destination (punkt docelowy): Żarnowiec
-- Weight (waga): 2800 kg
-- Budget (budżet): 0 PP — select the category whose fee is zero (system-funded)
-- Contents (zawartość): kasety z paliwem do reaktora
-- Special notes (uwagi specjalne): NONE — leave this field empty or omit it
+Shipment data:
+- Sender ID: 450202122
+- Route: Gdańsk → Żarnowiec
+- Weight: 2800 kg
+- Contents: kasety z paliwem do reaktora
 
-Critical rules:
-- Always analyze image files — they may contain tariff tables or route maps with essential data
-- The declaration format must match the template character-for-character (Hub validates formatting)
-- Do NOT invent route codes or fees — derive them strictly from the documentation
+If the Hub rejects your submission, use the error message to identify and fix the specific \
+problem, then resubmit.
 """
 
 
@@ -190,10 +95,12 @@ def main():
     parser.add_argument("--max-iterations", type=int, default=25)
     args = parser.parse_args()
 
+    vision_service = LLMService(provider="gateway", model="gemini-2.5-flash")
+
     result = run_agent(
         system_prompt=SYSTEM_PROMPT,
         user_message=f"Fill and submit the SPK declaration. Start by reading: {DOC_INDEX_URL}",
-        tools=TOOLS,
+        tools=[READ_DOC_TOOL, make_analyze_image_tool(vision_service), SUBMIT_DECLARATION_TOOL],
         model="gpt-4.1-mini",
         max_iterations=args.max_iterations,
         max_tokens=4096,

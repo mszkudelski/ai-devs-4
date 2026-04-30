@@ -7,8 +7,6 @@ Usage:
     python -m tasks.s01e01.solution
 """
 
-import csv
-import io
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -16,7 +14,7 @@ from pydantic import BaseModel, Field
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.ai_devs import LLMService, send_report, get_hub_data
+from src.ai_devs import LLMService, send_report, get_hub_data, parse_csv
 
 
 # ── Pydantic schemas for structured output ──────────────────────────
@@ -41,12 +39,6 @@ class BatchTaggingResult(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
-
-def parse_csv(text: str) -> list[dict]:
-    """Parse CSV text into a list of dicts."""
-    reader = csv.DictReader(io.StringIO(text))
-    return [row for row in reader]
-
 
 def filter_people(people: list[dict]) -> list[dict]:
     """Filter: males, born in Grudziądz, aged 20-40 in 2026."""
